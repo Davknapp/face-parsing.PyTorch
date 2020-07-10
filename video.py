@@ -125,10 +125,37 @@ def replace_background(video_path, bk_img_path, respth='./res/test_res', cp='mod
     write_video(os.path.join(respth, "background"+os.path.basename(video_path))+".mp4", new_frames, info["video_fps"])
 
 
+def blur_background(video_path, respth='./res/test_res', cp='model_final_diss.pth'):
+    frames, audio, info = read_video(video_path, 61, 65, pts_unit="sec")
+
+    scale_labels = transforms.Compose([
+        transforms.ToPILImage(),
+        transforms.Resize((frames.shape[1], frames.shape[2]), interpolation=Image.NEAREST),
+        transforms.ToTensor()
+    ])
+
+    labels = label_images(frames, cp)
+    new_frames = []
+    for frame_inx in tqdm.tqdm(list(range(frames.shape[0])), desc="generating segmented frames with background"):
+        scaled_label = scale_labels(labels[frame_inx].type(torch.uint8)).squeeze(0)
+        scaled_label = torch.stack([scaled_label, scaled_label, scaled_label], dim=2)
+
+        blurred_img = torch.from_numpy(cv2.blur(frames[frame_inx].numpy(), (15, 15)))
+
+        new_frames.append(torch.where(scaled_label > 0, frames[frame_inx], blurred_img))
+
+    new_frames = torch.stack(new_frames)
+
+    write_video(os.path.join(respth, "blurred_background"+os.path.basename(video_path))+".mp4", new_frames, round(info["video_fps"]))
+
+
 
 if __name__ == "__main__":
     #http://conradsanderson.id.au/vidtimit/
     path_video = "/home/tbellfelix/Downloads/head.mpg"
+
+    #https://video.bundesregierung.de/2020/03/18/a6eqjk-20200318_a-master.mp4?download=1
+    path_video3 = "/home/tbellfelix/Downloads/video.mp4"
 
     #https://www.flickr.com/photos/hirespic/35225820042/
     bg = "/home/tbellfelix/Downloads/background.jpg"
@@ -137,3 +164,4 @@ if __name__ == "__main__":
     #evaluate(dspth='images/', cp='79999_iter.pth')
     label_and_render_video(path_video, cp='79999_iter.pth')
     replace_background(path_video, bg, cp='79999_iter.pth')
+    blur_background(path_video3, cp='79999_iter.pth')
